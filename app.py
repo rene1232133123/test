@@ -1,25 +1,45 @@
-import os
 import weaviate
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from dotenv import load_dotenv
 from openai import OpenAI
 from weaviate.auth import AuthApiKey
 from spellchecker import SpellChecker
 import uuid
 
-load_dotenv()
-WEAVIATE_URL = os.getenv("WEAVIATE_URL")
-WEAVIATE_API_KEY = os.getenv("WEAVIATE_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# ------------------------
+# DIRECT CONFIG (no .env)
+# ------------------------
+WEAVIATE_URL = "https://wxfpjuqdrhmpos7izlzjoa.c0.asia-southeast1.gcp.weaviate.cloud"
+WEAVIATE_API_KEY = "aHZROEQ0TU1uZ1B4K0tqU196N1Q1bSsyUEpSUzhoZW85aXA0Uzh5b1djeStTS1lSZndtRHZlQ3FQZUZRPV92MjAw"
+OPENAI_API_KEY = "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"
 
+# ------------------------
+# INIT CLIENTS
+# ------------------------
 auth_config = AuthApiKey(api_key=WEAVIATE_API_KEY)
 weaviate_client = weaviate.Client(url=WEAVIATE_URL, auth_client_secret=auth_config)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 spell = SpellChecker()
 
+# ------------------------
+# FASTAPI APP
+# ------------------------
 app = FastAPI(title="Product Search API", version="4.0")
+
+# ✅ CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "*"],  # restrict in prod!
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ------------------------
+# HELPERS
+# ------------------------
 sessions: Dict[str, Dict[str, Any]] = {}
 
 def correct_query(query: str) -> str:
@@ -90,6 +110,9 @@ def gpt_chit_chat(message: str) -> str:
     )
     return response.choices[0].message.content.strip()
 
+# ------------------------
+# MODELS
+# ------------------------
 class SearchRequest(BaseModel):
     query: str
     top_k: Optional[int] = 5
@@ -120,6 +143,9 @@ class ChatResponse(BaseModel):
     products: Optional[List[Product]] = None
     rag_answer: Optional[str] = None
 
+# ------------------------
+# ROUTES
+# ------------------------
 @app.post("/search", response_model=SearchResponse)
 def search_products(body: SearchRequest):
     corrected_query = correct_query(body.query)
@@ -148,7 +174,6 @@ def search_products(body: SearchRequest):
 
 @app.post("/chat", response_model=ChatResponse)
 def chat_with_user(body: ChatRequest):
-    # Create session if not exists
     session = sessions.get(body.session_id, {"collected_info": {}, "history": []})
     collected = session["collected_info"]
     user_msg = body.message.lower()
