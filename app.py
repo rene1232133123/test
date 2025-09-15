@@ -117,18 +117,35 @@ def product_matches(product, collected):
     return True
 
 def rag_response(user_query: str, retrieved_products: List[dict]) -> str:
-    context = "\n".join(
-        [f"- {p['name']} ({p['brand']}), {p['currency']} {p['price']}: {p['description']}" for p in retrieved_products]
+    if not retrieved_products:
+        return "I couldn’t find any suitable products right now."
+
+    # Always pick top product by certainty
+    top_product = retrieved_products[0]
+    alternatives = retrieved_products[1:3]  # at most 2 alternatives
+
+    top_text = f"{top_product['name']} ({top_product['brand']}), {top_product['currency']} {top_product['price']}: {top_product['description']}"
+    alt_text = "\n".join(
+        [f"- {p['name']} ({p['brand']}), {p['currency']} {p['price']}: {p['description']}" 
+         for p in alternatives]
     )
+
     prompt = f"""
 You are a helpful skincare assistant.
 User asked: "{user_query}"
 
-Here are some relevant products from the database:
-{context}
+Main recommended product:
+{top_text}
 
-Provide a short, clear recommendation (2-3 sentences max).
+Alternative options:
+{alt_text if alt_text else 'None'}
+
+Write a short recommendation:
+- Start with why the main product is the BEST choice.
+- Then suggest the alternatives as backup options.
+- Keep it concise (max 4 sentences).
 """
+
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -138,6 +155,7 @@ Provide a short, clear recommendation (2-3 sentences max).
         temperature=0.7,
     )
     return response.choices[0].message.content.strip()
+
 
 def parse_budget(budget_text: str):
     budget_text = budget_text.lower().replace("$", "").strip()
@@ -303,7 +321,7 @@ def chat_with_user(body: ChatRequest):
         fallback_message = None
 
     products.sort(key=lambda x: x["_additional"]["certainty"], reverse=True)
-    products = products[:5]
+    products = products[:3]
 
     rag_answer = rag_response(query_text, products)
 
