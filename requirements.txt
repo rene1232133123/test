@@ -3,6 +3,6 @@ uvicorn[standard]
 pydantic
 python-dotenv
 openai
-weaviate-client
+weaviate-client>=3.26.7,<4.0.0
 pyspellchecker
 pandas
